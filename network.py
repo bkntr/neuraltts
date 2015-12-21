@@ -53,9 +53,8 @@ def iterate_minibatches(dataset, batchsize, shuffle=False):
 
     data_stream = DataStream(dataset=dataset, iteration_scheme=scheme)
     for data in data_stream.get_epoch_iterator():
-        words = np.fromstring(data[1].lower(), dtype='uint8')
-        words -= ord('a')
+        words = np.fromstring(data[1], dtype='uint8')
         words = words.reshape((len(data[1]), -1))
-        wavs = data[0]
+        wavs = data[0].astype(np.float32) / 255.0
 
         yield words, wavs

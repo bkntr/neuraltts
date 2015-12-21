@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import subprocess
 import re
 import h5py
@@ -6,8 +8,8 @@ import progressbar
 from fuel.datasets import H5PYDataset
 
 WAV_HEADER_LEN = 44
-BATCH = 100
-N = 5000
+BATCH = 200
+N = 500000
 
 WAV_MAX = 102400
 WORD_MAX = 20
@@ -18,8 +20,8 @@ def text2wav(text):
     (output, err) = p.communicate()
     return np.fromstring(output, dtype=np.uint8)[WAV_HEADER_LEN:]
 
-words_path = '../data/eng_wikipedia_2010_1M-words.txt'
-output_path = 'words.hdf5'
+words_path = 'data/eng_wikipedia_2010_1M-words.txt'
+output_path = 'data/words.hdf5'
 
 pattern = re.compile('[\W_]+')
 

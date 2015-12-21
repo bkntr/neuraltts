@@ -38,8 +38,8 @@ SNAPSHOT_INTERVAL = 1000
 def main(num_epochs=10):
     # Load the dataset
     print('Loading dataset...')
-    train_set = H5PYDataset('words.hdf5', which_sets=('train',), load_in_memory=True)
-    test_set = H5PYDataset('words.hdf5', which_sets=('test',), load_in_memory=True)
+    train_set = H5PYDataset('data/words.hdf5', which_sets=('train',), load_in_memory=True)
+    test_set = H5PYDataset('data/words.hdf5', which_sets=('test',), load_in_memory=True)
 
     target_var = T.matrix('target')
 
@@ -47,7 +47,7 @@ def main(num_epochs=10):
     print('Building model and compiling functions...')
     network, input_var = build_network()
 
-    regularization = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2)
+    regularization = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2) * 1e-4
 
     # loss
     prediction = lasagne.layers.get_output(network)
@@ -59,7 +59,7 @@ def main(num_epochs=10):
     # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
     params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.nesterov_momentum(
-            loss, params, learning_rate=0.001, momentum=0.9)
+            loss, params, learning_rate=0.01, momentum=0.9)
 
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
@@ -127,4 +127,4 @@ def main(num_epochs=10):
 
 
 if __name__ == '__main__':
-    main(2)
+    main(1000)
