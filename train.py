@@ -36,11 +36,6 @@ SNAPSHOT_INTERVAL = 1000
 # easier to read.
 
 def main(num_epochs=10):
-    # Load the dataset
-    print('Loading dataset...')
-    train_set = H5PYDataset('data/words.hdf5', which_sets=('train',), load_in_memory=True)
-    test_set = H5PYDataset('data/words.hdf5', which_sets=('test',), load_in_memory=True)
-
     target_var = T.matrix('target')
 
     # Create neural network model
@@ -81,24 +76,34 @@ def main(num_epochs=10):
 
     print_err = 0
 
+    # Load the dataset
+    print('Loading test set...')
+    test_set = H5PYDataset('data/words.hdf5', which_sets=('test',), load_in_memory=True)
+
     # We iterate over epochs:
     for epoch in range(num_epochs):
-        # In each epoch, we do a full pass over the training data:
-        train_err = 0
-        train_batches = 0
-        start_time = time.time()
-        for inputs, targets in iterate_minibatches(train_set, BATCH, shuffle=True):
-            err = train_fn(inputs, targets)
-            train_err += err
-            train_batches += 1
+        for i in range(5):
+            print('Loading train set...')
+            train_set = H5PYDataset('data/words.hdf5',
+                                    which_sets=('train',),
+                                    subset=slice(i * 100000, min(i * 100000 + 100000, 450000)),
+                                    load_in_memory=True)
+            # In each epoch, we do a full pass over the training data:
+            train_err = 0
+            train_batches = 0
+            start_time = time.time()
+            for inputs, targets in iterate_minibatches(train_set, BATCH, shuffle=True):
+                err = train_fn(inputs, targets)
+                train_err += err
+                train_batches += 1
 
-            print_err += err
-            if train_batches % PRINT_INTERVAL == 0:
-                print("[{}] loss:\t\t{:.6f}".format(train_batches, print_err / PRINT_INTERVAL))
-                print_err = 0
+                print_err += err
+                if train_batches % PRINT_INTERVAL == 0:
+                    print("[{}] loss:\t\t{:.6f}".format(train_batches, print_err / PRINT_INTERVAL))
+                    print_err = 0
 
-            if train_batches % SNAPSHOT_INTERVAL == 0:
-                np.savez('snapshot_{}.npz'.format(train_batches), *lasagne.layers.get_all_param_values(network))
+                if train_batches % SNAPSHOT_INTERVAL == 0:
+                    np.savez('snapshot_{}.npz'.format(train_batches), *lasagne.layers.get_all_param_values(network))
 
         # And a full pass over the validation data:
         val_err = 0
