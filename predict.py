@@ -14,11 +14,10 @@ HEADER = np.array((0x52, 0x49, 0x46, 0x46, 0x4A, 0xB1, 0x00, 0x00, 0x57, 0x41, 0
 
 
 def predict(snapshot):
-    test_set = H5PYDataset('words.hdf5', which_sets=('test',), load_in_memory=True)
+    test_set = H5PYDataset('data/words.hdf5', which_sets=('test',), load_in_memory=True, subset=slice(0,10))
 
     # build network
-    input_var = T.matrix('input')
-    network = build_network(input_var)
+    network, input_var = build_network()
 
     # load parameters
     with np.load(snapshot) as f:
@@ -30,12 +29,11 @@ def predict(snapshot):
     pred_fn = theano.function([input_var], [test_prediction])
 
     for inputs, _ in iterate_minibatches(test_set, 10, shuffle=True):
-        wav = pred_fn(inputs)[0]
+        wav = np.round(pred_fn(inputs)[0] * 255.0)
         for i in range(10):
-            word = inputs[i].tostring().rstrip('\x00')
-            with open('wavs/' + word + '.wav', 'wb') as f:
+            with open('wavs/' + str(i) + '.wav', 'wb') as f:
                 np.concatenate((HEADER, wav[i, :].astype(np.uint8))).tofile(f)
 
 
 if __name__ == '__main__':
-    predict('snapshot_141.npz')
+    predict('snapshot_1000.npz')
