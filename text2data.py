@@ -9,7 +9,7 @@ from fuel.datasets import H5PYDataset
 
 WAV_HEADER_LEN = 44
 BATCH = 200
-N = 500000
+N = 200000
 
 WAV_MAX = 102400
 WORD_MAX = 20

@@ -26,7 +26,7 @@ from fuel.datasets import H5PYDataset
 from network import build_network, iterate_minibatches
 
 BATCH = 32
-PRINT_INTERVAL = 1
+PRINT_INTERVAL = 50
 SNAPSHOT_INTERVAL = 1000
 
 
@@ -78,16 +78,16 @@ def main(num_epochs=10):
 
     # Load the dataset
     print('Loading test set...')
-    test_set = H5PYDataset('data/words.hdf5', which_sets=('test',), load_in_memory=False)
+    test_set = H5PYDataset('data/words.hdf5', which_sets=('test',), load_in_memory=True)
 
     # We iterate over epochs:
     for epoch in range(num_epochs):
-        for i in range(5):
+        for i in range(2):
             print('Loading train set...')
             train_set = H5PYDataset('data/words.hdf5',
                                     which_sets=('train',),
-                                    subset=slice(i * 100000, min(i * 100000 + 100000, 450000)),
-                                    load_in_memory=False)
+                                    subset=slice(i * 100000, min(i * 100000 + 100000, 180000)),
+                                    load_in_memory=True)
             # In each epoch, we do a full pass over the training data:
             train_err = 0
             train_batches = 0
