@@ -1,5 +1,6 @@
 import lasagne
-import theano.tensor as T
+from lasagne.layers import *
+from lasagne.nonlinearities import *
 
 from tabulate import tabulate
 from data import WORD_CHANNELS
@@ -57,15 +58,76 @@ def build_network():
     return l_out, l_in.input_var
 
 
-def build_autoencoder():
-    l_in = lasagne.layers.InputLayer(shape=(None, 320), name='input')
-    l_dense1 = lasagne.layers.DenseLayer(l_in, nonlinearity=None, b=None, num_units=240)
-    l_nl1 = lasagne.layers.NonlinearityLayer(lasagne.layers.BiasLayer(l_dense1))
-    l_inv1 = lasagne.layers.InverseLayer(l_nl1, l_dense1)
-    l_bias1 = lasagne.layers.BiasLayer(l_inv1)
-    l_shuffle = lasagne.layers.DimshuffleLayer(l_bias1, (0, 'x', 1))
-    l_conv = lasagne.layers.Conv1DLayer(l_shuffle, 1, 11, pad='same', nonlinearity=lasagne.nonlinearities.linear)
-    l_out = lasagne.layers.FlattenLayer(l_conv)
+# def build_autoencoder():
+#     l_in = InputLayer(shape=(None, 320), name='input')
+#     l_dense1 = DenseLayer(l_in, nonlinearity=None, b=None, num_units=240, name='dense1')
+#     l_dense1_nl = NonlinearityLayer(lasagne.layers.BiasLayer(l_dense1, name='dense1_bias'), name='dense1_nl')
+#
+#     l_dense2 = DenseLayer(l_dense1_nl, nonlinearity=None, b=None, num_units=160, name='dense2')
+#     l_dense2_nl = NonlinearityLayer(lasagne.layers.BiasLayer(l_dense2, name='dense2_bias'), name='dense2_nl')
+#
+#     l_dense3 = DenseLayer(l_dense2_nl, nonlinearity=None, b=None, num_units=80, name='dense3')
+#     l_dense3_nl = NonlinearityLayer(lasagne.layers.BiasLayer(l_dense3, name='dense3_bias'), name='dense3_nl')
+#     l_dense3_inv = InverseLayer(l_dense3_nl, l_dense3, name='dense3_inv')
+#     l_dense3_inv_bias = BiasLayer(l_dense3_inv, name='dense3_inv_bias')
+#
+#     l_dense2_inv = InverseLayer(l_dense3_inv_bias, l_dense2, name='dense2_inv')
+#     l_dense2_inv_bias = BiasLayer(l_dense2_inv, name='dense2_inv_bias')
+#
+#     l_dense1_inv = InverseLayer(l_dense2_inv_bias, l_dense1, name='dense1_inv')
+#     l_dense1_inv_bias = BiasLayer(l_dense1_inv, name='dense1_inv_bias')
+#
+#     return l_dense1_inv_bias, l_in.input_var
 
-    return l_out, l_in.input_var
+# def build_autoencoder(depth):
+#     units = 320
+#     l_in = InputLayer(shape=(None, units), name='input')
+#
+#     denses = []
+#     l_prev = l_in
+#     for i in range(1, depth+1):
+#         name = 'dense_%d' % i
+#         denses.append(DenseLayer(l_prev, nonlinearity=None, b=None, num_units=units / 2**i, name=name))
+#         l_dense_nl = NonlinearityLayer(BiasLayer(denses[i-1], name=name + '_bias'),
+#                                        name=name + '_nl')
+#         l_prev = l_dense_nl
+#
+#     for i in reversed(range(1, depth+1)):
+#         name = 'dense_%d' % i
+#         l_dense_inv = InverseLayer(l_prev, denses[i-1], name=name + '_inv')
+#         l_prev = BiasLayer(l_dense_inv, name=name + '_inv_bias')
+#
+#     print_network(l_prev)
+#
+#     return l_prev, l_in.input_var
+
+def build_autoencoder(depth):
+    units = 320
+    l_in = InputLayer(shape=(None, units), name='input')
+    l_dimshuffle = DimshuffleLayer(l_in, (0, 'x', 1))
+
+    convs = []
+    l_prev = l_dimshuffle
+    for i in range(1, depth+1):
+        name = 'conv_%d' % i
+        convs.append(Conv1DLayer(l_prev, 4*2**i, 11, stride=2, nonlinearity=None, b=None, pad='same', name=name))
+        l_prev = NonlinearityLayer(BiasLayer(convs[i-1], name=name + '_bias'),
+                                   name=name + '_nl')
+
+    name = 'conv_lowdim'
+    l_lowdim = Conv1DLayer(l_prev, 1, 3, nonlinearity=None, b=None, pad='same', name=name)
+    l_prev = NonlinearityLayer(BiasLayer(l_lowdim, name=name + '_bias'),
+                                   name=name + '_nl')
+    l_prev = InverseLayer(l_prev, l_lowdim, name=name + '_inv')
+    l_prev = BiasLayer(l_prev, name=name + '_inv_bias')
+
+    for i in reversed(range(1, depth+1)):
+        name = 'conv_%d' % i
+        l_prev = InverseLayer(l_prev, convs[i-1], name=name + '_inv')
+        l_prev = BiasLayer(l_prev, name=name + '_inv_bias')
+
+    l_prev = FlattenLayer(l_prev)
+    print_network(l_prev)
+
+    return l_prev, l_in.input_var
 

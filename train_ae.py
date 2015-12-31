@@ -5,6 +5,15 @@ from __future__ import print_function
 import os
 
 from data import iterate_wavchunks, iterate_wavchunks_fft
+import time
+
+import numpy as np
+import theano
+import theano.tensor as T
+
+import lasagne
+
+from network import build_autoencoder
 
 
 def save_comparison(path, input, pred, rate):
@@ -42,22 +51,30 @@ def save_comparison(path, input, pred, rate):
     plt.close()
 
 
+def save_snapshot(network, snapshot_path):
+    params = {p.name: p.get_value() for p in lasagne.layers.get_all_params(network)}
+    np.savez(snapshot_path, **params)
+
+
+def load_snapshot(network, snapshot_dir, snapshot):
+    # load parameters
+    with np.load(os.path.join(snapshot_dir, 'snapshot_') + snapshot + '.npz') as f:
+        for p in f.keys():
+            layer_name, param_name = p.split('.', 1)
+            for l in lasagne.layers.get_all_layers(network):
+                if l.name == layer_name:
+                    param = getattr(l, param_name)
+                    param.set_value(f[p])
+                    l.params[param] -= {'trainable', 'regularizable'}
+    return int(snapshot)
+
+
 def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_interval):
-    import time
-
-    import numpy as np
-    import theano
-    import theano.tensor as T
-
-    import lasagne
-
-    from network import build_autoencoder
-
     target_var = T.matrix('target')
 
     # Create neural network model
     print('Building model and compiling functions...')
-    network, input_var = build_autoencoder()
+    network, input_var = build_autoencoder(3)
 
     snapshot_dir = os.path.join(experiment, 'snapshots')
     if not os.path.isdir(snapshot_dir):
@@ -66,11 +83,9 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
     if not os.path.isdir(figure_dir):
         os.makedirs(figure_dir)
 
+    train_batches = 0
     if snapshot:
-        # load parameters
-        with np.load(os.path.join(snapshot_dir, 'snapshot_') + snapshot + '.npz') as f:
-            param_values = [f['arr_%d' % i] for i in range(len(f.files))]
-        lasagne.layers.set_all_param_values(network, param_values)
+        train_batches = load_snapshot(network, snapshot_dir, snapshot)
 
     regularization = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2) * 1e-4
     regularization = 0
@@ -101,10 +116,11 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
 
     print_time = time.time()
     print('Training...')
-    for train_batches, inputs in enumerate(iterate_wavchunks(dataset, 320, batch_size)):
+    for inputs in iterate_wavchunks(dataset, 320, batch_size):
         train_err += train_fn(inputs, inputs)
 
         # print loss
+        train_batches += 1
         if train_batches % print_interval == 0:
             ms_per_iter = (time.time() - print_time) / print_interval * 1000
             print_time = time.time()
@@ -117,7 +133,7 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
             pred = pred_fn(inputs)
             snapshot_path = os.path.join(snapshot_dir, 'snapshot_{}.npz'.format(train_batches))
             comparison_path = os.path.join(figure_dir, 'figure_{}.png'.format(train_batches))
-            np.savez(snapshot_path, *lasagne.layers.get_all_param_values(network))
+            save_snapshot(network, snapshot_path)
             save_comparison(comparison_path, inputs[0, :], pred[0, :], 16000)
 
             # pred_complex = [complex(pred[0, i], pred[0, i+1]) for i in range(0, pred.shape[1], 2)]
@@ -138,9 +154,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args.dataset,
-         args.snapshot,
-         os.path.join('experiments', '240_conv'),
+    main('data/wavs',
+         None,
+         os.path.join('experiments', 'conv'),
          32,
          1000,
          10000)

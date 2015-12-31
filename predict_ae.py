@@ -2,6 +2,7 @@ import os
 import wave
 
 from data import iterate_wavs
+from train_ae import load_snapshot
 
 
 def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_interval):
@@ -17,13 +18,11 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
 
     # Create neural network model
     print('Building model and compiling functions...')
-    network, input_var = build_autoencoder()
+    network, input_var = build_autoencoder(3)
 
     snapshot_dir = os.path.join(experiment, 'snapshots')
     # load parameters
-    with np.load(os.path.join(snapshot_dir, 'snapshot_') + snapshot + '.npz') as f:
-        param_values = [f['arr_%d' % i] for i in range(len(f.files))]
-    lasagne.layers.set_all_param_values(network, param_values)
+    load_snapshot(network, snapshot_dir, snapshot)
 
     # predict
     prediction = lasagne.layers.get_output(network)
@@ -43,10 +42,13 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
             input_pad = np.zeros((1, 320), dtype=np.float32)
             input_nopad = input[frame:frame+320]
             input_pad[0, :len(input_nopad)] = input_nopad
-            pred[frame:frame+320] = (pred_fn(input_pad) * np.iinfo(np.uint16).max).astype(np.uint16)[0, :len(pred[frame:frame+320])]
+            pred[frame:frame+320] = (np.clip(pred_fn(input_pad), 0, 1) * np.iinfo(np.uint16).max).astype(np.uint16)[0, :len(pred[frame:frame+320])]
 
-        wav_file.writeframes((pred * np.iinfo(np.uint16).max).astype(dtype=np.uint16))
+        wav_file.writeframes(pred)
         wav_file.close()
+
+        if train_batches > 5:
+            break
 
 
 if __name__ == '__main__':
@@ -62,9 +64,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main('/home/benk/uni/shai/neuraltts/data/1919/142785/wavs',
+    main('/home/benk/uni/shai/neuraltts/data/wavs',
          '50000',
-         os.path.join('experiments', '240'),
+         os.path.join('experiments', 'conv'),
          args.batch_size,
          args.print_interval,
          args.snapshot_interval)
