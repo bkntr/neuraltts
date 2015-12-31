@@ -37,4 +37,4 @@ def predict(snapshot):
 
 
 if __name__ == '__main__':
-    predict('snapshot_33000.npz')
+    predict('sigmoid/snapshot_290000.npz')

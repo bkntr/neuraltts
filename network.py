@@ -1,23 +1,20 @@
 import lasagne
-import numpy as np
+import theano.tensor as T
 
-from fuel.schemes import ShuffledScheme, SequentialScheme
-from fuel.streams import DataStream
 from tabulate import tabulate
+from data import WORD_CHANNELS
 
 WAV_MAX = 102400
 WORD_MAX = 20
 
-_vals = 'abcdefghijklmnopqrstuvwxyz0123456789\x00'
-_max_val = np.max([ord(c) for c in _vals])
-_lut = np.zeros((_max_val + 1, 1), dtype=np.uint8)
-for i in range(len(_vals)):
-    _lut[ord(_vals[i])] = i
-
-WORD_CHANNELS = len(_vals)
-EPSILON = WORD_CHANNELS - 1
-
 GRAD_CLIP = 100
+
+
+def print_network(network):
+    net_print = []
+    for l in lasagne.layers.get_all_layers(network):
+        net_print.append([l.name, 'x'.join(map(str, l.output_shape))])
+    print(tabulate(net_print))
 
 
 def build_network():
@@ -57,26 +54,18 @@ def build_network():
     l_shuffle2 = lasagne.layers.DimshuffleLayer(l_add, (0, 2, 1), name='shuffle2')
     l_out = lasagne.layers.FlattenLayer(l_shuffle2, name='flatten')
 
-    net_print = []
-    for l in lasagne.layers.get_all_layers(l_out):
-        net_print.append([l.name, 'x'.join(map(str, l.output_shape))])
-    print(tabulate(net_print))
-
     return l_out, l_in.input_var
 
 
-def iterate_minibatches(dataset, batchsize, shuffle=False):
+def build_autoencoder():
+    l_in = lasagne.layers.InputLayer(shape=(None, 320), name='input')
+    l_dense1 = lasagne.layers.DenseLayer(l_in, nonlinearity=None, b=None, num_units=240)
+    l_nl1 = lasagne.layers.NonlinearityLayer(lasagne.layers.BiasLayer(l_dense1))
+    l_inv1 = lasagne.layers.InverseLayer(l_nl1, l_dense1)
+    l_bias1 = lasagne.layers.BiasLayer(l_inv1)
+    l_shuffle = lasagne.layers.DimshuffleLayer(l_bias1, (0, 'x', 1))
+    l_conv = lasagne.layers.Conv1DLayer(l_shuffle, 1, 11, pad='same', nonlinearity=lasagne.nonlinearities.linear)
+    l_out = lasagne.layers.FlattenLayer(l_conv)
 
-    if shuffle:
-        scheme = ShuffledScheme(examples=dataset.num_examples,
-                                batch_size=batchsize,
-                                rng=np.random.RandomState())
-    else:
-        scheme = SequentialScheme(examples=dataset.num_examples, batch_size=batchsize)
-    data_stream = DataStream(dataset=dataset, iteration_scheme=scheme)
-    for data in data_stream.get_epoch_iterator():
-        words = np.take(_lut, np.fromstring(np.char.lower(data[1]), dtype='uint8').reshape((len(data[1]), -1)))
-        words = np.eye(len(_vals), dtype=np.float32)[words].transpose(0, 2, 1)
-        wavs = data[0].view(np.uint16).astype(np.float32) / np.iinfo('uint16').max
+    return l_out, l_in.input_var
 
-        yield words, wavs
