@@ -74,7 +74,7 @@ def load_snapshot(network, snapshot_dir, snapshot):
 CHUNK_SIZE = 16000
 
 
-def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, experiment, **kwargs):
+def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, experiment, learning_rate, **kwargs):
     target_var = T.matrix('target')
 
     # Create neural network model
@@ -109,7 +109,7 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
 
     # updates
     params = lasagne.layers.get_all_params(network, trainable=True)
-    updates = lasagne.updates.adam(loss, params, 0.001)
+    updates = lasagne.updates.adam(loss, params, learning_rate)
     # updates = lasagne.updates.nesterov_momentum(loss, params, 0.0)
 
     # Compile
@@ -164,16 +164,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train network.')
     parser.add_argument('-s', '--snapshot')
     parser.add_argument('-d', '--dataset')
-    parser.add_argument('-e', '--experiment', default='.')
+    parser.add_argument('-e', '--experiment', default='')
     parser.add_argument('-b', '--batch-size', type=int, default=32)
     parser.add_argument('-p', '--print-interval', type=int, default=10)
     parser.add_argument('-n', '--snapshot-interval', type=int, default=1000)
+    parser.add_argument('-l', '--learning-rate', type=float, default=0.01)
 
     args = parser.parse_args()
 
-    main(dataset='/home/benk/uni_ubuntu/shai/data/mansfield1_16000/',
-         snapshot=None,
-         batch_size=128,
-         print_interval=1000,
-         snapshot_interval=10000,
-         experiment='mfcc')
+    # main(dataset='/home/benk/uni_ubuntu/shai/data/mansfield1_16000/',
+    #      snapshot=None,
+    #      batch_size=128,
+    #      print_interval=1000,
+    #      snapshot_interval=10000,
+    #      experiment='mfcc')
+
+    main(**vars(args))
