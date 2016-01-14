@@ -1,24 +1,23 @@
 import os
-import wave
 
+import scipy.io.wavfile as wave
 from data import iterate_wavs
 from train_ae import load_snapshot
 
 
-def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_interval):
+def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_interval, depth):
     import numpy as np
     import theano
     import theano.tensor as T
 
     import lasagne
 
-    from network import build_autoencoder
+    import network as net
 
-    target_var = T.matrix('target')
 
     # Create neural network model
     print('Building model and compiling functions...')
-    network, input_var = build_autoencoder(3)
+    network, input_var = net.build_dense_autoencoder(320, depth)
 
     snapshot_dir = os.path.join(experiment, 'snapshots')
     # load parameters
@@ -34,21 +33,17 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
 
     print('Predicting...')
     for train_batches, (f, input) in enumerate(iterate_wavs(dataset, 320, batch_size)):
-        wav_file = wave.open(os.path.join(pred_dir, f), 'w')
-        wav_file.setparams((1, 2, 16000, len(input), 'NONE', 'not compressed'))
 
-        pred = np.zeros((len(input),), dtype=np.uint16)
+        pred = np.zeros((len(input),), dtype=np.int16)
         for frame in range(0, len(input), 320):
             input_pad = np.zeros((1, 320), dtype=np.float32)
             input_nopad = input[frame:frame+320]
-            input_pad[0, :len(input_nopad)] = input_nopad
-            pred[frame:frame+320] = (np.clip(pred_fn(input_pad), 0, 1) * np.iinfo(np.uint16).max).astype(np.uint16)[0, :len(pred[frame:frame+320])]
+            input_pad[0, :len(input_nopad)] = input_nopad / abs(input_nopad).max()
+            pred[frame:frame+320] = (np.clip(pred_fn(input_pad), -1, 1) * abs(input_nopad).max()).astype(np.int16)[0, :len(pred[frame:frame+320])]
 
-        wav_file.writeframes(pred)
-        wav_file.close()
+        wave.write(os.path.join(pred_dir, f), 16000, pred)
 
-        if train_batches > 5:
-            break
+        break
 
 
 if __name__ == '__main__':
@@ -64,9 +59,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main('/home/benk/uni/shai/neuraltts/data/wavs',
-         '50000',
-         os.path.join('experiments', 'conv'),
+    main('/home/benk/uni_ubuntu/shai/data/mansfield1_16000/',
+         '30000',
+         os.path.join('experiments', 'b128-320-80'),
          args.batch_size,
          args.print_interval,
-         args.snapshot_interval)
+         args.snapshot_interval,
+         depth=[80])

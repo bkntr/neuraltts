@@ -38,7 +38,9 @@ def iterate_wavchunks(root, chunk_size, batch_size):
     wavs = []
     for f in os.listdir(root):
         rate, data = wave.read(os.path.join(root, f))
-        wavs.append(data.astype(np.uint16))
+        wavs.append(data)
+        if len(wavs) >= 1000:
+            break
 
     assert wavs
 
@@ -48,7 +50,8 @@ def iterate_wavchunks(root, chunk_size, batch_size):
         for i in range(batch_size):
             chunk_start = randint(0, len(w) - chunk_size - 1)
             batch[i, :] = w[chunk_start:(chunk_start + chunk_size)]
-        yield batch / np.iinfo(np.uint16).max
+        batch_max = batch.max()
+        yield batch / batch_max, batch_max
 
 
 def iterate_wavchunks_fft(root, chunk_size, batch_size):
@@ -66,10 +69,11 @@ def iterate_wavchunks_fft(root, chunk_size, batch_size):
             chunk_start = randint(0, len(w) - chunk_size - 1)
             fft = np.fft.fft(w[chunk_start:(chunk_start + chunk_size)])
             batch[i, :] = np.vstack((fft.real, fft.imag)).T.flatten()
-        yield batch
+        batch_max = batch.max()
+        yield batch / batch_max, batch_max
 
 
 def iterate_wavs(root, chunk_size, batch_size):
     for f in os.listdir(root):
         rate, data = wave.read(os.path.join(root, f))
-        yield f, data.astype(np.uint16).astype(np.float32) / np.iinfo(np.uint16).max
+        yield f, data.astype(np.float32)

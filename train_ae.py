@@ -4,6 +4,8 @@ from __future__ import print_function
 
 import os
 
+import datetime
+
 from data import iterate_wavchunks, iterate_wavchunks_fft
 import time
 
@@ -13,7 +15,7 @@ import theano.tensor as T
 
 import lasagne
 
-from network import build_autoencoder
+import network as net
 
 
 def save_comparison(path, input, pred, rate):
@@ -65,16 +67,21 @@ def load_snapshot(network, snapshot_dir, snapshot):
                 if l.name == layer_name:
                     param = getattr(l, param_name)
                     param.set_value(f[p])
-                    l.params[param] -= {'trainable', 'regularizable'}
+                    #l.params[param] -= {'trainable', 'regularizable'}
     return int(snapshot)
 
 
-def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_interval):
+CHUNK_SIZE = 16000
+
+
+def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, experiment, **kwargs):
     target_var = T.matrix('target')
 
     # Create neural network model
     print('Building model and compiling functions...')
-    network, input_var = build_autoencoder(3)
+    network, input_var = net.build_mfcc_autoencoder(CHUNK_SIZE, **kwargs)
+
+    experiment = os.path.join('experiments', experiment, '{:%d-%m-%y_%H-%M-%S}'.format(datetime.datetime.today()))
 
     snapshot_dir = os.path.join(experiment, 'snapshots')
     if not os.path.isdir(snapshot_dir):
@@ -102,7 +109,8 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
 
     # updates
     params = lasagne.layers.get_all_params(network, trainable=True)
-    updates = lasagne.updates.adam(loss, params)
+    updates = lasagne.updates.adam(loss, params, 0.001)
+    # updates = lasagne.updates.nesterov_momentum(loss, params, 0.0)
 
     # Compile
     train_fn = theano.function([input_var, target_var], loss, updates=updates)
@@ -114,9 +122,14 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
 
     train_err = 0
 
+    stats_path = os.path.join(experiment, 'stats.log'.format(train_batches))
+    stats_file = open(stats_path, 'w')
+
+    stats_file.write(str(kwargs))
+
     print_time = time.time()
     print('Training...')
-    for inputs in iterate_wavchunks(dataset, 320, batch_size):
+    for inputs, inputs_max in iterate_wavchunks(dataset, CHUNK_SIZE, batch_size):
         train_err += train_fn(inputs, inputs)
 
         # print loss
@@ -124,8 +137,10 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
         if train_batches % print_interval == 0:
             ms_per_iter = (time.time() - print_time) / print_interval * 1000
             print_time = time.time()
-            print("[{}] loss:\t\t{:.6f} ({:.2f} ms/iter)".format(
-                    train_batches, train_err / print_interval, ms_per_iter))
+            stats = "[{}] loss:\t\t{:.6f} ({:.2f} ms/iter)".format(
+                    train_batches, train_err / print_interval, ms_per_iter)
+            print(stats)
+            stats_file.write(stats + '\n')
             train_err = 0
 
         # save snapshot
@@ -139,6 +154,8 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
             # pred_complex = [complex(pred[0, i], pred[0, i+1]) for i in range(0, pred.shape[1], 2)]
             # input_complex = [complex(inputs[0, i], inputs[0, i+1]) for i in range(0, inputs.shape[1], 2)]
             # save_comparison(comparison_path, np.fft.ifft(input_complex), np.fft.ifft(pred_complex), 16000)
+
+    stats_file.close()
 
 
 if __name__ == '__main__':
@@ -154,9 +171,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main('data/wavs',
-         None,
-         os.path.join('experiments', 'conv'),
-         32,
-         1000,
-         10000)
+    main(dataset='/home/benk/uni_ubuntu/shai/data/mansfield1_16000/',
+         snapshot=None,
+         batch_size=128,
+         print_interval=1000,
+         snapshot_interval=10000,
+         experiment='mfcc')
