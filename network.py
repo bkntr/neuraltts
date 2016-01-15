@@ -16,7 +16,7 @@ def print_network(network):
     print(tabulate(net_print))
 
 
-def build_dense_autoencoder(input_size, units):
+def build_dense_autoencoder(input_size, units, **kwargs):
     l_in = ll.InputLayer(shape=(None, input_size), name='input')
 
     denses = [None] * len(units)
@@ -69,13 +69,13 @@ def build_conv_autoencoder(input_size, channels):
     return l_prev, l_in.input_var
 
 
-def build_mfcc_autoencoder(input_size):
+def build_mfcc_autoencoder(input_size, **kwargs):
     WINDOW=200
     l_in = ll.InputLayer(shape=(None, input_size), name='input')
     l_out = ll.DimshuffleLayer(l_in, (0, 'x', 1))
     l_out = ll.Conv1DLayer(l_out,  num_filters=WINDOW, filter_size=WINDOW, stride=WINDOW/2, name='conv_enc1')
     l_out = ll.Conv1DLayer(l_out, num_filters=50, filter_size=1, name='conv_enc2')
-    l_out = ll.Conv1DLayer(l_out, num_filters=10, filter_size=1, name='conv_enc3')
+    l_out = ll.Conv1DLayer(l_out, num_filters=20, filter_size=1, name='conv_enc3')
     l_out = ll.Conv1DLayer(l_out, num_filters=50, filter_size=1, name='conv_dec1')
     l_out = ll.Conv1DLayer(l_out, num_filters=WINDOW, filter_size=1, name='conv_dec2')
     l_out = ll.DimshuffleLayer(l_out, (0, 2, 1))

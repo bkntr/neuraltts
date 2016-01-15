@@ -5,6 +5,9 @@ from data import iterate_wavs
 from train_ae import load_snapshot
 
 
+CHUNK_SIZE = 200
+
+
 def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_interval, depth):
     import numpy as np
     import theano
@@ -17,7 +20,7 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
 
     # Create neural network model
     print('Building model and compiling functions...')
-    network, input_var = net.build_dense_autoencoder(320, depth)
+    network, input_var = net.build_dense_autoencoder(CHUNK_SIZE, depth)
 
     snapshot_dir = os.path.join(experiment, 'snapshots')
     # load parameters
@@ -32,14 +35,13 @@ def main(dataset, snapshot, experiment, batch_size, print_interval, snapshot_int
         os.makedirs(pred_dir)
 
     print('Predicting...')
-    for train_batches, (f, input) in enumerate(iterate_wavs(dataset, 320, batch_size)):
-
+    for train_batches, (f, input) in enumerate(iterate_wavs(dataset)):
         pred = np.zeros((len(input),), dtype=np.int16)
-        for frame in range(0, len(input), 320):
-            input_pad = np.zeros((1, 320), dtype=np.float32)
-            input_nopad = input[frame:frame+320]
-            input_pad[0, :len(input_nopad)] = input_nopad / abs(input_nopad).max()
-            pred[frame:frame+320] = (np.clip(pred_fn(input_pad), -1, 1) * abs(input_nopad).max()).astype(np.int16)[0, :len(pred[frame:frame+320])]
+        for frame in range(0, len(input) - CHUNK_SIZE, CHUNK_SIZE):
+            chunk = input[frame:frame+CHUNK_SIZE].reshape((1, CHUNK_SIZE))
+            m, s = chunk.mean(), chunk.std()
+            chunk = (chunk - m) / s
+            pred[frame:frame+CHUNK_SIZE] = (pred_fn(chunk) * s + m).astype(np.int16)
 
         wave.write(os.path.join(pred_dir, f), 16000, pred)
 
@@ -61,8 +63,8 @@ if __name__ == '__main__':
 
     main('/home/benk/uni_ubuntu/shai/data/mansfield1_16000/',
          '30000',
-         os.path.join('experiments', 'b128-320-80'),
+         os.path.join('experiments', 'dense/15-01-16_10-53-45'),
          args.batch_size,
          args.print_interval,
          args.snapshot_interval,
-         depth=[80])
+         depth=[100, 20])

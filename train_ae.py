@@ -6,7 +6,7 @@ import os
 
 import datetime
 
-from data import iterate_wavchunks, iterate_wavchunks_fft
+from data import iterate_wavchunks, iterate_wavchunks_fft, iterate_wavs
 import time
 
 import numpy as np
@@ -16,6 +16,7 @@ import theano.tensor as T
 import lasagne
 
 import network as net
+import scipy.io.wavfile as wave
 
 
 def save_comparison(path, input, pred, rate):
@@ -61,26 +62,66 @@ def save_snapshot(network, snapshot_path):
 def load_snapshot(network, snapshot_dir, snapshot):
     # load parameters
     with np.load(os.path.join(snapshot_dir, 'snapshot_') + snapshot + '.npz') as f:
+        all_params = {p.name: p for p in lasagne.layers.get_all_params(network)}
         for p in f.keys():
-            layer_name, param_name = p.split('.', 1)
-            for l in lasagne.layers.get_all_layers(network):
-                if l.name == layer_name:
-                    param = getattr(l, param_name)
-                    param.set_value(f[p])
-                    #l.params[param] -= {'trainable', 'regularizable'}
+            if p in all_params:
+                all_params[p].set_value(f[p].astype(np.float32))
+                del all_params[p]
+                #l.params[param] -= {'trainable', 'regularizable'}
     return int(snapshot)
 
 
-CHUNK_SIZE = 16000
+def predict(dataset, snapshot, batch_size, experiment, **kwargs):
+    experiment = os.path.join('experiments', experiment)
+
+    # Create neural network model
+    print('Building model and compiling functions...')
+    network, input_var = build_network(CHUNK_SIZE, [100, 20], **kwargs)
+
+    snapshot_dir = os.path.join(experiment, 'snapshots')
+    # load parameters
+    load_snapshot(network, snapshot_dir, snapshot)
+
+    # predict
+    prediction = lasagne.layers.get_output(network)
+    pred_fn = theano.function([input_var], prediction)
+
+    pred_dir = os.path.join(experiment, 'pred')
+    if not os.path.isdir(pred_dir):
+        os.makedirs(pred_dir)
+
+    print('Predicting...')
+    for f, wav in iterate_wavs(dataset):
+        wav = wav[320000:320000+16000].reshape((1,16000))
+        m, s = wav.mean(), wav.std()
+        pred = pred_fn((wav - m) / s)
+        pred = ((pred * s) + m).astype(np.int16).flatten()
+        print(np.mean((wav-pred)**2))
+
+        wave.write(os.path.join(pred_dir, f), 16000, pred)
+
+        break
 
 
-def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, experiment, learning_rate, **kwargs):
+def train(type, dataset, snapshot, batch_size, print_interval, snapshot_interval, learning_rate, **kwargs):
     target_var = T.matrix('target')
 
     # Create neural network model
-    network, input_var = net.build_mfcc_autoencoder(CHUNK_SIZE, **kwargs)
+    if type.startswith('dense'):
+        units = map(int, type.split('-')[1:])
+        CHUNK_SIZE = 200
+        network, input_var = net.build_dense_autoencoder(CHUNK_SIZE, units)
+    elif type.startswith('mfcc'):
+        CHUNK_SIZE = 1600
+        network, input_var = net.build_mfcc_autoencoder(CHUNK_SIZE)
+    else:
+        print('network type must be dense or mfcc')
+        return
 
-    experiment = os.path.join('experiments', experiment, '{:%d-%m-%y_%H-%M-%S}'.format(datetime.datetime.today()))
+    if snapshot:
+        experiment = os.path.abspath(os.path.join(os.path.dirname(snapshot), os.path.pardir))
+    else:
+        experiment = os.path.join('experiments', type, '{:%d-%m-%y_%H-%M-%S}'.format(datetime.datetime.today()))
 
     print('Experiment dir: ', experiment)
 
@@ -90,6 +131,9 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
     figure_dir = os.path.join(experiment, 'figures')
     if not os.path.isdir(figure_dir):
         os.makedirs(figure_dir)
+    pred_dir = os.path.join(experiment, 'pred')
+    if not os.path.isdir(pred_dir):
+        os.makedirs(pred_dir)
 
     train_batches = 0
     if snapshot:
@@ -125,14 +169,16 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
 
     train_err = 0
 
-    stats_path = os.path.join(experiment, 'stats.log'.format(train_batches))
+    stats_path = os.path.join(experiment, 'stats.log')
     stats_file = open(stats_path, 'w')
 
     stats_file.write(str(kwargs))
 
     print_time = time.time()
     print('Training...')
-    for inputs, inputs_max in iterate_wavchunks(dataset, CHUNK_SIZE, batch_size):
+    for inputs in iterate_wavchunks(os.path.join(dataset, 'train'), CHUNK_SIZE, batch_size):
+        m, s = inputs.mean(), inputs.std()
+        inputs = (inputs - m) / s
         train_err += train_fn(inputs, inputs)
 
         # print loss
@@ -148,11 +194,26 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
 
         # save snapshot
         if train_batches % snapshot_interval == 0:
-            pred = pred_fn(inputs)
             snapshot_path = os.path.join(snapshot_dir, 'snapshot_{}.npz'.format(train_batches))
             comparison_path = os.path.join(figure_dir, 'figure_{}.png'.format(train_batches))
+
+            orig_path = os.path.join(pred_dir, 'orig_{}.wav'.format(train_batches))
+            pred_path = os.path.join(pred_dir, 'pred_{}.wav'.format(train_batches))
             save_snapshot(network, snapshot_path)
-            save_comparison(comparison_path, inputs[0, :], pred[0, :], 16000)
+
+            rate, data = wave.read('/home/benk/uni_ubuntu/shai/data/mansfield1_16000/test/Mansfield Park ch01.wav')
+            data = data[0:20*16000].astype(np.float32)
+            pred = np.zeros((len(data),), dtype=np.int16)
+            for frame in range(0, len(data), CHUNK_SIZE):
+                chunk = data[frame:frame+CHUNK_SIZE].reshape((1, CHUNK_SIZE))
+                m, s = chunk.mean(), chunk.std()
+                chunk = (chunk - m) / s
+                pred[frame:frame+CHUNK_SIZE] = (pred_fn(chunk) * s + m).astype(np.int16)
+
+            save_comparison(comparison_path, data, pred, 16000)
+
+            wave.write(orig_path, 16000, data.astype(np.int16))
+            wave.write(pred_path, 16000, pred)
 
             # pred_complex = [complex(pred[0, i], pred[0, i+1]) for i in range(0, pred.shape[1], 2)]
             # input_complex = [complex(inputs[0, i], inputs[0, i+1]) for i in range(0, inputs.shape[1], 2)]
@@ -167,11 +228,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train network.')
     parser.add_argument('-s', '--snapshot')
     parser.add_argument('-d', '--dataset')
-    parser.add_argument('-e', '--experiment', default='')
+    parser.add_argument('-t', '--type', default='')
     parser.add_argument('-b', '--batch-size', type=int, default=32)
     parser.add_argument('-p', '--print-interval', type=int, default=10)
     parser.add_argument('-n', '--snapshot-interval', type=int, default=1000)
     parser.add_argument('-l', '--learning-rate', type=float, default=0.01)
+    parser.add_argument('--predict', action='store_true')
 
     args = parser.parse_args()
 
@@ -182,4 +244,7 @@ if __name__ == '__main__':
     #      snapshot_interval=10000,
     #      experiment='mfcc')
 
-    main(**vars(args))
+    if args.predict:
+        predict(**vars(args))
+    else:
+        train(**vars(args))
