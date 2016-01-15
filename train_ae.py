@@ -78,10 +78,11 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
     target_var = T.matrix('target')
 
     # Create neural network model
-    print('Building model and compiling functions...')
     network, input_var = net.build_mfcc_autoencoder(CHUNK_SIZE, **kwargs)
 
     experiment = os.path.join('experiments', experiment, '{:%d-%m-%y_%H-%M-%S}'.format(datetime.datetime.today()))
+
+    print('Experiment dir: ', experiment)
 
     snapshot_dir = os.path.join(experiment, 'snapshots')
     if not os.path.isdir(snapshot_dir):
@@ -97,6 +98,8 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
     regularization = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2) * 1e-4
     regularization = 0
 
+    print('Building model and compiling functions...')
+
     # train loss
     prediction = lasagne.layers.get_output(network)
     loss = lasagne.objectives.squared_error(prediction, target_var)
@@ -110,7 +113,7 @@ def main(dataset, snapshot, batch_size, print_interval, snapshot_interval, exper
     # updates
     params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.adam(loss, params, learning_rate)
-    # updates = lasagne.updates.nesterov_momentum(loss, params, 0.0)
+    # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate)
 
     # Compile
     train_fn = theano.function([input_var, target_var], loss, updates=updates)

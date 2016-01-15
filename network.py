@@ -70,13 +70,19 @@ def build_conv_autoencoder(input_size, channels):
 
 
 def build_mfcc_autoencoder(input_size):
+    WINDOW=200
     l_in = ll.InputLayer(shape=(None, input_size), name='input')
     l_out = ll.DimshuffleLayer(l_in, (0, 'x', 1))
-    l_out = ll.Conv1DLayer(l_out,  num_filters=400, filter_size=401, stride=200, pad='same', name='conv_enc1')
-    l_out = ll.Conv1DLayer(l_out, num_filters=80, filter_size=1, name='conv_enc2')
-    l_out = ll.Conv1DLayer(l_out, num_filters=400, filter_size=1, name='conv_dec1')
-    l_out = ll.ReshapeLayer(l_out, ([0], 200, input_size*2 / 200), name='reshape')
-    l_out = ll.Conv1DLayer(l_out, num_filters=200, filter_size=3, stride=2, pad='same', name='conv_dec2')
+    l_out = ll.Conv1DLayer(l_out,  num_filters=WINDOW, filter_size=WINDOW, stride=WINDOW/2, name='conv_enc1')
+    l_out = ll.Conv1DLayer(l_out, num_filters=50, filter_size=1, name='conv_enc2')
+    l_out = ll.Conv1DLayer(l_out, num_filters=10, filter_size=1, name='conv_enc3')
+    l_out = ll.Conv1DLayer(l_out, num_filters=50, filter_size=1, name='conv_dec1')
+    l_out = ll.Conv1DLayer(l_out, num_filters=WINDOW, filter_size=1, name='conv_dec2')
+    l_out = ll.DimshuffleLayer(l_out, (0, 2, 1))
+    l_out = ll.ReshapeLayer(l_out, ([0], -1, WINDOW/2), name='reshape')
+    l_out = ll.DimshuffleLayer(l_out, (0, 2, 1))
+    l_out = ll.Conv1DLayer(l_out, num_filters=WINDOW/2, filter_size=2, stride=2, pad=1, name='conv_dec3', nonlinearity=None)
+    l_out = ll.DimshuffleLayer(l_out, (0, 2, 1))
     l_out = ll.FlattenLayer(l_out)
 
     print_network(l_out)

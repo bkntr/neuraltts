@@ -51,7 +51,8 @@ def iterate_wavchunks(root, chunk_size, batch_size):
             chunk_start = randint(0, len(w) - chunk_size - 1)
             batch[i, :] = w[chunk_start:(chunk_start + chunk_size)]
         batch_max = batch.max()
-        yield batch / batch_max, batch_max
+        #yield batch / batch_max, batch_max
+        yield (batch - batch.mean()) / batch.std(), batch_max
 
 
 def iterate_wavchunks_fft(root, chunk_size, batch_size):
